@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "809642431817",
+    "firebase_url": "https://pawfinder-ac326-default-rtdb.firebaseio.com",
+    "project_id": "pawfinder-ac326",
+    "storage_bucket": "pawfinder-ac326.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:809642431817:android:364555ca54173b2de53698",
+        "android_client_info": {
+          "package_name": "com.example.pawfinder"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAHyksB64L9CH6h5YhcDuFMvGb4K9FdDIQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
