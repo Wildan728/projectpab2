@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:pawfinder/screens/detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -6,38 +10,16 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  List<Map<String, String>> dummyCats = [
-    {
-      'name': 'Milo',
-      'location': 'Palembang',
-      'image': 'assets/images/image.png',
-    },
-    {'name': 'Luna', 'location': 'Jakarta', 'image': 'assets/images/image.png'},
-    {
-      'name': 'Oscar',
-      'location': 'Bandung',
-      'image': 'assets/images/image.png',
-    },
-    {
-      'name': 'Coco',
-      'location': 'Surabaya',
-      'image': 'assets/images/image.png',
-    },
-  ];
-
   String searchQuery = '';
+
+  Stream<QuerySnapshot> catStream =
+      FirebaseFirestore.instance
+          .collection('cats')
+          .orderBy('created_at', descending: true)
+          .snapshots();
 
   @override
   Widget build(BuildContext context) {
-    final filteredCats =
-        dummyCats
-            .where(
-              (cat) => cat['name']!.toLowerCase().contains(
-                searchQuery.toLowerCase(),
-              ),
-            )
-            .toList();
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: PreferredSize(
@@ -119,86 +101,144 @@ class _HomeScreenState extends State<HomeScreen> {
 
             // 🐱 GridView Cat Cards
             Expanded(
-              child: GridView.builder(
-                itemCount: filteredCats.length,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 0.8,
-                ),
-                itemBuilder: (context, index) {
-                  final cat = filteredCats[index];
-                  return GestureDetector(
-                    onTap: () {
-                      // TODO: Navigasi ke detail kucing
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.withOpacity(0.15),
-                            blurRadius: 8,
-                            offset: Offset(2, 4),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.vertical(
-                              top: Radius.circular(16),
+              child: StreamBuilder<QuerySnapshot>(
+                stream: catStream,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return Center(child: CircularProgressIndicator());
+                  }
+
+                  if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    return Center(
+                      child: Text("Belum ada kucing yang diposting"),
+                    );
+                  }
+
+                  final filteredCats =
+                      snapshot.data!.docs.where((doc) {
+                        final name =
+                            (doc['name'] ?? '').toString().toLowerCase();
+                        return name.contains(searchQuery.toLowerCase());
+                      }).toList();
+
+                  return GridView.builder(
+                    itemCount: filteredCats.length,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 0.6,
+                    ),
+                    itemBuilder: (context, index) {
+                      final cat = filteredCats[index];
+                      final name = cat['name'] ?? '';
+                      final jenis = cat['jenis'] ?? '';
+                      final fullAddress = cat['alamat'] ?? '';
+                      final imageBase64 = cat['image_base64'] ?? '';
+
+                      // Ambil kota dari alamat (elemen ke-2 atau ke-3)
+                      final location =
+                          fullAddress.split(',').length >= 3
+                              ? fullAddress.split(',')[3].trim()
+                              : fullAddress;
+
+                      return GestureDetector(
+                        onTap: () {
+                          // TODO: Navigasi ke detail kucing
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => DetailScreen(document: cat),
                             ),
-                            child: Image.asset(
-                              cat['image']!,
-                              height: 100,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                            ),
+                          );
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.grey.withOpacity(0.15),
+                                blurRadius: 8,
+                                offset: Offset(2, 4),
+                              ),
+                            ],
                           ),
-                          Padding(
-                            padding: const EdgeInsets.all(10.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  cat['name']!,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: Colors.black87,
-                                  ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.vertical(
+                                  top: Radius.circular(16),
                                 ),
-                                SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.location_on,
-                                      size: 14,
-                                      color: Colors.grey[600],
-                                    ),
-                                    SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        cat['location']!,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey[600],
+                                child:
+                                    imageBase64.isNotEmpty
+                                        ? AspectRatio(
+                                          aspectRatio: 1, // Rasio 1:1
+                                          child: Image.memory(
+                                            base64Decode(imageBase64),
+                                            width: double.infinity,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        )
+                                        : Container(
+                                          height: 100,
+                                          color: Colors.grey[300],
+                                          child: Icon(
+                                            Icons.image_not_supported,
+                                          ),
                                         ),
-                                        overflow: TextOverflow.ellipsis,
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      name,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                        color: Colors.black87,
                                       ),
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      jenis,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                    SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.location_on,
+                                          size: 14,
+                                          color: Colors.green[600],
+                                        ),
+                                        SizedBox(width: 4),
+                                        Expanded(
+                                          child: Text(
+                                            location,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[600],
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   );
                 },
               ),
