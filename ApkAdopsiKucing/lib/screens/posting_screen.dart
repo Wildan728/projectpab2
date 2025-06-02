@@ -1,11 +1,15 @@
+import 'dart:convert';
 import 'dart:io';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
-import 'package:image_picker/image_picker.dart'; // Untuk mengambil gambar dari galeri
-import 'package:geolocator/geolocator.dart'; // Untuk mengambil lokasi pengguna
+import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:pawfinder/services/cat_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image/image.dart' as img;
 
 class PostingScreen extends StatefulWidget {
   @override
@@ -13,46 +17,33 @@ class PostingScreen extends StatefulWidget {
 }
 
 class _PostingScreenState extends State<PostingScreen> {
-  // Variabel untuk menyimpan gambar yang dipilih
   dynamic _pickedImage;
-  // Instance ImagePicker untuk mengambil gambar
   final picker = ImagePicker();
-  // Key untuk form validasi
   final _formKey = GlobalKey<FormState>();
-  // Variabel untuk menyimpan file gambar
   XFile? _imageFile;
 
-  // Ukuran tampilan gambar
   double _imageHeight = 150;
   double _imageWidth = double.infinity;
 
-  // Variabel data kucing
   String name = '';
-  String jenis = ''; // Menyimpan jenis kucing yang dipilih/diinput
+  String jenis = '';
   String gender = '';
   String umur = '';
   String warna = '';
   String deskripsi = '';
+  // String userId = '';
   String selectedTimeUnit = 'Tahun';
 
-  // Variabel lokasi
   LatLng? selectedLocation;
-  LatLng defaultLocation = LatLng(
-    -2.990934,
-    104.756554,
-  ); // Lokasi default: Palembang
+  LatLng defaultLocation = LatLng(-2.990934, 104.756554);
   String? selectedAddress;
 
-  // List pilihan satuan umur dan gender
   final List<String> timeUnits = ['Hari', 'Minggu', 'Bulan', 'Tahun'];
   final List<String> genderOptions = ['Jantan', 'Betina'];
 
-  // Variabel dan list untuk dropdown jenis kucing
-  String? selectedJenisKucingDropdownValue; // Menyimpan nilai dropdown
-  TextEditingController _otherJenisKucingController =
-      TextEditingController(); // Controller untuk input "Lainnya"
-  bool _showOtherJenisKucingField =
-      false; // Menampilkan input jika pilih "Lainnya"
+  String? selectedJenisKucingDropdownValue;
+  TextEditingController _otherJenisKucingController = TextEditingController();
+  bool _showOtherJenisKucingField = false;
   final List<String> jenisKucingOptions = [
     'Domestik/Kampung',
     'Persia',
@@ -63,24 +54,21 @@ class _PostingScreenState extends State<PostingScreen> {
     'Bengal',
     'Ragdoll',
     'British Shorthair',
-    'Lainnya', // Jika ini dipilih, muncul field manual
+    'Lainnya',
   ];
 
   @override
   void initState() {
     super.initState();
-    // Saat inisialisasi, cek izin lokasi dan ambil lokasi pengguna
     _checkLocationPermissionAndGetLocation();
   }
 
   @override
   void dispose() {
-    // Penting: dispose controller untuk menghindari memory leak
     _otherJenisKucingController.dispose();
     super.dispose();
   }
 
-  // Fungsi untuk mengambil gambar dari galeri
   Future<void> _pickImage() async {
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
@@ -91,7 +79,6 @@ class _PostingScreenState extends State<PostingScreen> {
     }
   }
 
-  // Fungsi untuk mengambil lokasi saat ini
   Future<void> _getCurrentLocation() async {
     try {
       Position position = await Geolocator.getCurrentPosition(
@@ -99,17 +86,14 @@ class _PostingScreenState extends State<PostingScreen> {
       );
       setState(() {
         selectedLocation = LatLng(position.latitude, position.longitude);
-        selectedAddress = null; // Reset alamat saat lokasi baru diambil
+        selectedAddress = null;
       });
-      await _updateAddress(
-        selectedLocation!,
-      ); // Update alamat berdasarkan lokasi
+      await _updateAddress(selectedLocation!);
     } catch (e) {
       print("Gagal mendapatkan lokasi: $e");
     }
   }
 
-  // Fungsi untuk cek izin lokasi, jika sudah dapat izin langsung ambil lokasi
   Future<void> _checkLocationPermissionAndGetLocation() async {
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
@@ -126,7 +110,6 @@ class _PostingScreenState extends State<PostingScreen> {
     _getCurrentLocation();
   }
 
-  // Fungsi reverse geocoding: mengubah latlng jadi alamat
   Future<void> _updateAddress(LatLng position) async {
     try {
       List<Placemark> placemarks = await placemarkFromCoordinates(
@@ -153,15 +136,89 @@ class _PostingScreenState extends State<PostingScreen> {
     }
   }
 
-  // Widget untuk menampilkan gambar yang dipilih
+  // Kompres dan encode gambar ke base64
+  Future<String?> compressAndEncodeImage(
+    XFile? imageFile, {
+    int maxWidth = 400,
+    int quality = 70,
+  }) async {
+    if (imageFile == null) return null;
+    final bytes = await File(imageFile.path).readAsBytes();
+    img.Image? image = img.decodeImage(bytes);
+    if (image == null) return null;
+
+    img.Image resized = img.copyResize(image, width: maxWidth);
+
+    List<int> jpg = img.encodeJpg(resized, quality: quality);
+
+    // Pastikan ukuran di bawah 900KB (batas aman Firestore)
+    if (jpg.length > 900 * 1024) {
+      return null;
+    }
+
+    return base64Encode(jpg);
+  }
+
+  Future<void> saveCatData() async {
+    String? imageBase64 = await compressAndEncodeImage(_imageFile);
+
+    if (_imageFile != null && imageBase64 == null) {
+      // Gambar terlalu besar walau sudah dikompres
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Ukuran gambar terlalu besar!')));
+      return;
+    }
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    await FirebaseFirestore.instance.collection('cats').add({
+      'name': name,
+      'jenis': jenis,
+      'gender': gender,
+      'umur': umur,
+      'satuan_umur': selectedTimeUnit,
+      'warna': warna,
+      'deskripsi': deskripsi,
+      'latitude': selectedLocation?.latitude,
+      'longitude': selectedLocation?.longitude,
+      'alamat': selectedAddress,
+      'image_base64': imageBase64,
+      'uid': userId,
+      'created_at': FieldValue.serverTimestamp(),
+    });
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Data berhasil disimpan!')));
+    Navigator.pop(context);
+  }
+
+  void _resetForm() {
+    setState(() {
+      _formKey.currentState?.reset();
+      _pickedImage = null;
+      _imageFile = null;
+      name = '';
+      jenis = '';
+      gender = '';
+      umur = '';
+      warna = '';
+      deskripsi = '';
+      selectedTimeUnit = 'Tahun';
+      selectedJenisKucingDropdownValue = null;
+      _otherJenisKucingController.clear();
+      _showOtherJenisKucingField = false;
+      // Jika ingin reset lokasi dan alamat juga, uncomment:
+      // selectedLocation = null;
+      // selectedAddress = null;
+    });
+  }
+
   Widget _buildImageWidget() {
     if (_pickedImage == null) {
-      // Jika belum ada gambar, tampilkan icon
       return Center(
         child: Icon(Icons.add_a_photo, size: 50, color: Colors.grey[700]),
       );
     } else {
-      // Jika sudah ada gambar, tampilkan gambar
       return ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: Image.file(
@@ -174,7 +231,6 @@ class _PostingScreenState extends State<PostingScreen> {
     }
   }
 
-  // Widget input teks umum dengan validasi default huruf dan spasi
   Widget _buildTextField(
     String label,
     Function(String) onSaved, {
@@ -208,7 +264,6 @@ class _PostingScreenState extends State<PostingScreen> {
     );
   }
 
-  // Widget input umur (angka) + dropdown satuan umur
   Widget _buildAgeField() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -242,7 +297,6 @@ class _PostingScreenState extends State<PostingScreen> {
             ),
           ),
           SizedBox(width: 8),
-          // Dropdown satuan umur
           DropdownButton<String>(
             value: selectedTimeUnit,
             onChanged: (String? newValue) {
@@ -251,21 +305,18 @@ class _PostingScreenState extends State<PostingScreen> {
               });
             },
             items:
-                timeUnits
-                    .map(
-                      (String timeUnit) => DropdownMenuItem<String>(
-                        value: timeUnit,
-                        child: Text(timeUnit),
-                      ),
-                    )
-                    .toList(),
+                timeUnits.map((String timeUnit) {
+                  return DropdownMenuItem<String>(
+                    value: timeUnit,
+                    child: Text(timeUnit),
+                  );
+                }).toList(),
           ),
         ],
       ),
     );
   }
 
-  // Widget dropdown jenis kelamin
   Widget _buildGenderDropdown() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -278,14 +329,9 @@ class _PostingScreenState extends State<PostingScreen> {
         ),
         value: gender.isNotEmpty ? gender : null,
         items:
-            genderOptions
-                .map(
-                  (String value) => DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(value),
-                  ),
-                )
-                .toList(),
+            genderOptions.map((String value) {
+              return DropdownMenuItem<String>(value: value, child: Text(value));
+            }).toList(),
         onChanged: (newValue) {
           setState(() {
             gender = newValue ?? '';
@@ -302,7 +348,6 @@ class _PostingScreenState extends State<PostingScreen> {
     );
   }
 
-  // Widget dropdown jenis kucing + field manual jika pilih "Lainnya"
   Widget _buildJenisKucingDropdown() {
     return Column(
       children: [
@@ -331,7 +376,6 @@ class _PostingScreenState extends State<PostingScreen> {
             onChanged: (newValue) {
               setState(() {
                 selectedJenisKucingDropdownValue = newValue;
-                // Jika pilih "Lainnya", tampilkan field manual
                 _showOtherJenisKucingField = (newValue == 'Lainnya');
                 if (!_showOtherJenisKucingField) {
                   _otherJenisKucingController.clear();
@@ -345,7 +389,6 @@ class _PostingScreenState extends State<PostingScreen> {
               return null;
             },
             onSaved: (val) {
-              // Jika pilih "Lainnya", simpan dari field manual
               if (val == 'Lainnya') {
                 jenis = _otherJenisKucingController.text.trim();
               } else {
@@ -383,20 +426,51 @@ class _PostingScreenState extends State<PostingScreen> {
                 }
                 return null;
               },
-              onSaved: (val) {
-                // Tidak perlu onSaved di sini, karena sudah diambil di onSaved dropdown
-              },
             ),
           ),
       ],
     );
   }
 
+  Widget _buildFlutterMap() {
+    final LatLng mapCenter = selectedLocation ?? defaultLocation;
+    return SizedBox(
+      height: 200,
+      child: FlutterMap(
+        options: MapOptions(
+          initialCenter: mapCenter,
+          initialZoom: 15,
+          onTap: (tapPos, latlng) async {
+            setState(() {
+              selectedLocation = latlng;
+              selectedAddress = null;
+            });
+            await _updateAddress(latlng);
+          },
+        ),
+        children: [
+          TileLayer(
+            urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            subdomains: ['a', 'b', 'c'],
+          ),
+          if (selectedLocation != null)
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: selectedLocation!,
+                  width: 40,
+                  height: 40,
+                  child: Icon(Icons.location_on, size: 40, color: Colors.red),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Menentukan posisi tengah peta (jika ada fitur peta)
-    final LatLng mapCenter = selectedLocation ?? defaultLocation;
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: PreferredSize(
@@ -434,7 +508,6 @@ class _PostingScreenState extends State<PostingScreen> {
           key: _formKey,
           child: Column(
             children: [
-              // Widget untuk memilih dan menampilkan gambar
               GestureDetector(
                 onTap: _pickImage,
                 child: Container(
@@ -448,17 +521,11 @@ class _PostingScreenState extends State<PostingScreen> {
                 ),
               ),
               SizedBox(height: 16),
-              // Input nama kucing
               _buildTextField('Nama Kucing', (val) => name = val),
-              // Dropdown jenis kucing (bisa input manual jika "Lainnya")
               _buildJenisKucingDropdown(),
-              // Dropdown jenis kelamin
               _buildGenderDropdown(),
-              // Input umur + satuan
               _buildAgeField(),
-              // Input warna kucing
               _buildTextField('Warna', (val) => warna = val),
-              // Input deskripsi opsional
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: TextFormField(
@@ -478,6 +545,7 @@ class _PostingScreenState extends State<PostingScreen> {
                   onSaved: (val) => deskripsi = val?.trim() ?? '',
                 ),
               ),
+              SizedBox(height: 10),
               Row(
                 children: [
                   Text(
@@ -486,137 +554,104 @@ class _PostingScreenState extends State<PostingScreen> {
                   ),
                 ],
               ),
+              SizedBox(height: 8),
               Row(
+                mainAxisAlignment: MainAxisAlignment.start,
                 children: [
-                  GestureDetector(
-                    onTap: _getCurrentLocation,
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.my_location, color: Colors.blue),
-                          SizedBox(width: 8),
-                          Text("Ambil Lokasi Saya"),
-                        ],
+                  ElevatedButton.icon(
+                    onPressed: _getCurrentLocation,
+                    icon: Icon(Icons.my_location, color: Colors.green),
+                    label: Text("Ambil Lokasi Saya"),
+                    style: ElevatedButton.styleFrom(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
                       ),
+                      backgroundColor: Colors.white, // warna tombol
                     ),
                   ),
                 ],
               ),
-              SizedBox(height: 8),
-              Container(
-                height: 250, // Sesuaikan tinggi peta
-                child: FlutterMap(
-                  options: MapOptions(
-                    initialCenter: mapCenter,
-                    initialZoom: 15,
-                    onTap: (tapPos, latlng) async {
-                      setState(() {
-                        selectedLocation = latlng;
-                        selectedAddress = null;
-                      });
-                      await _updateAddress(latlng);
-                    },
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      subdomains: ['a', 'b', 'c'],
-                    ),
-                    if (selectedLocation != null)
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: selectedLocation!,
-                            width: 40,
-                            height: 40,
-                            child: Icon(
-                              Icons.location_on,
-                              size: 40,
-                              color: Colors.red,
-                            ),
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
-              SizedBox(height: 8),
-              if (selectedAddress != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    children: [
-                      Icon(Icons.location_on, color: Colors.green),
-                      SizedBox(width: 8),
-                      Expanded(child: Text(selectedAddress!)),
-                    ],
-                  ),
-                ),
-              // Tombol simpan, tambahkan validasi gambar wajib diunggah di sini
               SizedBox(height: 10),
-
+              // Map dan lokasi
+              _buildFlutterMap(),
+              Row(
+                children: [
+                  Expanded(
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        selectedAddress ?? 'Alamat belum tersedia',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      subtitle:
+                          selectedLocation != null
+                              ? Text(
+                                'Lat: ${selectedLocation!.latitude.toStringAsFixed(5)}, Lng: ${selectedLocation!.longitude.toStringAsFixed(5)}',
+                                style: TextStyle(fontSize: 11),
+                              )
+                              : null,
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
-                    if (_formKey.currentState!.validate()) {
-                      // Validasi gambar wajib diunggah
-                      if (_pickedImage == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Gambar wajib diunggah!'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                        return;
-                      }
-                      if (selectedLocation == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Wajib memilih lokasi di peta!'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                        return;
-                      }
-                      _formKey.currentState!.save();
-                      // Lanjutkan proses simpan ke database di sini
-                      // Contoh: Print semua data yang telah diisi
-                      print('Nama: $name');
-                      print('Jenis: $jenis');
-                      print('Gender: $gender');
-                      print('Umur: $umur $selectedTimeUnit');
-                      print('Warna: $warna');
-                      print('Deskripsi: $deskripsi');
-                      print(
-                        'Lokasi: ${selectedLocation?.latitude}, ${selectedLocation?.longitude}',
-                      );
-                      print('Alamat: $selectedAddress');
-
+                  onPressed: () async {
+                    if (_imageFile == null) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Data berhasil disimpan!'),
-                          backgroundColor: Colors.green,
+                        SnackBar(
+                          content: Text('Harap pilih gambar terlebih dahulu'),
                         ),
                       );
+                      return; // Hentikan proses jika gambar belum dipilih
+                    }
+                    if (_formKey.currentState!.validate()) {
+                      _formKey.currentState!.save();
+                      try {
+                        final userId = FirebaseAuth.instance.currentUser?.uid;
+                        await CatService.saveCatData(
+                          name: name,
+                          jenis: jenis,
+                          gender: gender,
+                          umur: umur,
+                          satuanUmur: selectedTimeUnit,
+                          warna: warna,
+                          deskripsi: deskripsi,
+                          latitude: selectedLocation?.latitude,
+                          longitude: selectedLocation?.longitude,
+                          alamat: selectedAddress,
+                          imageFile: _imageFile,
+                          userId: userId,
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Berhasil posting!')),
+                          );
+                          _resetForm(); // reset semua field
+                        }
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Gagal posting: $e')),
+                        );
+                      }
                     }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Color(0xFF6FCF97),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
                   child: Text(
-                    'Simpan',
+                    'Posting',
                     style: TextStyle(
-                      color: Colors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                   ),
                 ),

@@ -18,6 +18,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
   final AuthService _authService = AuthService();
 
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
   void _login() async {
     String email = emailController.text.trim();
     String password = passwordController.text.trim();
@@ -59,15 +66,54 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (hasError) return;
 
-    User? user = await _authService.signInWithEmailPassword(email, password);
+    setState(() {
+      _isLoading = true; // Set loading state to true
+    });
 
-    if (user != null) {
-      // Berhasil login, pindah ke screen berikutnya
-      Navigator.pushReplacementNamed(context, '/BottomNavBar');
-    } else {
+    try {
+      User? user = await _authService.signInWithEmailPassword(email, password);
+
+      if (user != null) {
+        // Berhasil login, pindah ke screen berikutnya
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Login berhasil!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pushReplacementNamed(context, '/BottomNavBar');
+      } else {
+        // This 'else' block might not be reached if AuthService throws an exception.
+        // The error handling below will catch FirebaseAuthException.
+      }
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = 'Terjadi kesalahan saat login.';
+      if (e.code == 'user-not-found' || e.code == 'wrong-password') {
+        errorMessage = 'Email atau password salah. Silakan coba lagi.';
+      } else if (e.code == 'invalid-email') {
+        errorMessage = 'Format email tidak valid.';
+      } else if (e.code == 'user-disabled') {
+        errorMessage = 'Akun Anda telah dinonaktifkan.';
+      } else {
+        errorMessage = e.message ?? errorMessage;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
+      );
+    } catch (e) {
+      // Catch any other unexpected errors
+      print("Error during login process: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Terjadi kesalahan yang tidak terduga: ${e.toString()}',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
       setState(() {
-        _errorEmail = 'Email atau password salah!';
-        _errorPassword = 'Email atau password salah!';
+        _isLoading = false; // Set loading state to false
       });
     }
   }
@@ -163,7 +209,7 @@ class _LoginScreenState extends State<LoginScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _login,
+                  onPressed: _isLoading ? null : _login,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Color(0xFF6FCF97),
                     padding: EdgeInsets.symmetric(vertical: 16),
