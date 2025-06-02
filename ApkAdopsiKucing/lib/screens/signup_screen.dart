@@ -14,6 +14,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
   bool obscurePassword = true;
+  bool _isLoading = false;
 
   String? _errorEmail;
   String? _errorPassword;
@@ -22,6 +23,16 @@ class _SignupScreenState extends State<SignupScreen> {
   String? _errorPhone;
 
   final AuthService _authService = AuthService();
+
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    nameController.dispose();
+    usernameController.dispose();
+    phoneController.dispose();
+    super.dispose();
+  }
 
   void _signUp() async {
     String email = emailController.text.trim();
@@ -96,11 +107,57 @@ class _SignupScreenState extends State<SignupScreen> {
 
     if (hasError) return;
 
-    // Jika semua validasi lolos, lanjutkan proses sign up
-    User? user = await _authService.signUpWithEmailPassword(email, password);
+    setState(() {
+      _isLoading = true; // Set loading state
+    });
 
-    if (user != null) {
-      Navigator.pushReplacementNamed(context, '/LoginScreen');
+    try {
+      // Panggil fungsi signUpWithEmailPassword dengan data tambahan
+      User? user = await _authService.signUpWithEmailPassword(
+        email,
+        password,
+        name,
+        username,
+        phone,
+      );
+
+      if (user != null) {
+        // Pendaftaran berhasil, navigasi ke LoginScreen
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Pendaftaran berhasil! Silakan login.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pushReplacementNamed(context, '/LoginScreen');
+      }
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = 'Terjadi kesalahan saat pendaftaran.';
+      if (e.code == 'email-already-in-use') {
+        errorMessage = 'Email ini sudah terdaftar. Gunakan email lain.';
+      } else if (e.code == 'weak-password') {
+        errorMessage = 'Password terlalu lemah.';
+      } else {
+        errorMessage = e.message ?? errorMessage;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMessage), backgroundColor: Colors.red),
+      );
+    } catch (e) {
+      // Tangani error lain yang mungkin terjadi saat menyimpan ke Firestore
+      print("Error during sign up process: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Terjadi kesalahan yang tidak terduga: ${e.toString()}',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false; // Hentikan loading state
+      });
     }
   }
 
@@ -252,23 +309,29 @@ class _SignupScreenState extends State<SignupScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: Text(
-                    "Daftar",
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.white,
-                      shadows: [
-                        Shadow(
-                          color: Color.fromRGBO(0, 0, 0, 0.5),
-                          offset: Offset(2, 2),
-                          blurRadius: 2,
-                        ),
-                      ],
-                    ),
-                  ),
+                  child:
+                      _isLoading
+                          ? const CircularProgressIndicator(
+                            // Tampilkan loading indicator
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          )
+                          : const Text(
+                            "Daftar",
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(
+                                  color: Color.fromRGBO(0, 0, 0, 0.5),
+                                  offset: Offset(2, 2),
+                                  blurRadius: 2,
+                                ),
+                              ],
+                            ),
+                          ),
                 ),
               ),
-
               SizedBox(height: 20),
 
               // Sudah punya akun?

@@ -1,12 +1,15 @@
+import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart'; // Mobile
-import 'package:image_picker_web/image_picker_web.dart'; // Web
+import 'package:geocoding/geocoding.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:pawfinder/services/cat_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image/image.dart' as img;
 
 class PostingScreen extends StatefulWidget {
   @override
@@ -17,6 +20,7 @@ class _PostingScreenState extends State<PostingScreen> {
   dynamic _pickedImage;
   final picker = ImagePicker();
   final _formKey = GlobalKey<FormState>();
+  XFile? _imageFile;
 
   double _imageHeight = 150;
   double _imageWidth = double.infinity;
@@ -27,45 +31,51 @@ class _PostingScreenState extends State<PostingScreen> {
   String umur = '';
   String warna = '';
   String deskripsi = '';
-  String selectedTimeUnit = 'Tahun'; // Default value untuk unit waktu
+  // String userId = '';
+  String selectedTimeUnit = 'Tahun';
 
   LatLng? selectedLocation;
-  LatLng defaultLocation = LatLng(-2.990934, 104.756554); // Palembang
+  LatLng defaultLocation = LatLng(-2.990934, 104.756554);
+  String? selectedAddress;
 
-  final List<String> timeUnits = [
-    'Hari',
-    'Minggu',
-    'Bulan',
-    'Tahun',
-  ]; // Pilihan unit waktu
+  final List<String> timeUnits = ['Hari', 'Minggu', 'Bulan', 'Tahun'];
+  final List<String> genderOptions = ['Jantan', 'Betina'];
 
-  Future<void> _requestPermission() async {
-    if (kIsWeb) {
-      return;
-    } else {
-      PermissionStatus status = await Permission.storage.request();
-      if (!status.isGranted) {
-        print("Izin storage tidak diberikan.");
-      }
-    }
+  String? selectedJenisKucingDropdownValue;
+  TextEditingController _otherJenisKucingController = TextEditingController();
+  bool _showOtherJenisKucingField = false;
+  final List<String> jenisKucingOptions = [
+    'Domestik/Kampung',
+    'Persia',
+    'Maine Coon',
+    'Siam',
+    'Anggora',
+    'Sphynx',
+    'Bengal',
+    'Ragdoll',
+    'British Shorthair',
+    'Lainnya',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLocationPermissionAndGetLocation();
+  }
+
+  @override
+  void dispose() {
+    _otherJenisKucingController.dispose();
+    super.dispose();
   }
 
   Future<void> _pickImage() async {
-    if (kIsWeb) {
-      final imageBytes = await ImagePickerWeb.getImageAsBytes();
-      if (imageBytes != null) {
-        setState(() {
-          _pickedImage = imageBytes;
-        });
-      }
-    } else {
-      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-      if (pickedFile != null) {
-        setState(() {
-          _pickedImage = File(pickedFile.path);
-        });
-        print("Image picked: ${pickedFile.path}");
-      }
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      setState(() {
+        _imageFile = pickedFile;
+        _pickedImage = File(pickedFile.path);
+      });
     }
   }
 
@@ -76,17 +86,131 @@ class _PostingScreenState extends State<PostingScreen> {
       );
       setState(() {
         selectedLocation = LatLng(position.latitude, position.longitude);
+        selectedAddress = null;
       });
+      await _updateAddress(selectedLocation!);
     } catch (e) {
       print("Gagal mendapatkan lokasi: $e");
     }
   }
 
-  @override
-  void initState() {
-    super.initState();
+  Future<void> _checkLocationPermissionAndGetLocation() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        print('Izin lokasi ditolak');
+        return;
+      }
+    }
+    if (permission == LocationPermission.deniedForever) {
+      print('Izin lokasi ditolak permanen');
+      return;
+    }
     _getCurrentLocation();
-    _requestPermission();
+  }
+
+  Future<void> _updateAddress(LatLng position) async {
+    try {
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+      if (placemarks.isNotEmpty) {
+        Placemark place = placemarks.first;
+        String address =
+            '${place.street}, ${place.subLocality}, ${place.locality}, ${place.administrativeArea}, ${place.country}';
+        setState(() {
+          selectedAddress = address;
+        });
+      } else {
+        setState(() {
+          selectedAddress = 'Alamat tidak ditemukan';
+        });
+      }
+    } catch (e) {
+      print("Error reverse geocoding: $e");
+      setState(() {
+        selectedAddress = 'Gagal mendapatkan alamat';
+      });
+    }
+  }
+
+  // Kompres dan encode gambar ke base64
+  Future<String?> compressAndEncodeImage(
+    XFile? imageFile, {
+    int maxWidth = 400,
+    int quality = 70,
+  }) async {
+    if (imageFile == null) return null;
+    final bytes = await File(imageFile.path).readAsBytes();
+    img.Image? image = img.decodeImage(bytes);
+    if (image == null) return null;
+
+    img.Image resized = img.copyResize(image, width: maxWidth);
+
+    List<int> jpg = img.encodeJpg(resized, quality: quality);
+
+    // Pastikan ukuran di bawah 900KB (batas aman Firestore)
+    if (jpg.length > 900 * 1024) {
+      return null;
+    }
+
+    return base64Encode(jpg);
+  }
+
+  Future<void> saveCatData() async {
+    String? imageBase64 = await compressAndEncodeImage(_imageFile);
+
+    if (_imageFile != null && imageBase64 == null) {
+      // Gambar terlalu besar walau sudah dikompres
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Ukuran gambar terlalu besar!')));
+      return;
+    }
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    await FirebaseFirestore.instance.collection('cats').add({
+      'name': name,
+      'jenis': jenis,
+      'gender': gender,
+      'umur': umur,
+      'satuan_umur': selectedTimeUnit,
+      'warna': warna,
+      'deskripsi': deskripsi,
+      'latitude': selectedLocation?.latitude,
+      'longitude': selectedLocation?.longitude,
+      'alamat': selectedAddress,
+      'image_base64': imageBase64,
+      'uid': userId,
+      'created_at': FieldValue.serverTimestamp(),
+    });
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Data berhasil disimpan!')));
+    Navigator.pop(context);
+  }
+
+  void _resetForm() {
+    setState(() {
+      _formKey.currentState?.reset();
+      _pickedImage = null;
+      _imageFile = null;
+      name = '';
+      jenis = '';
+      gender = '';
+      umur = '';
+      warna = '';
+      deskripsi = '';
+      selectedTimeUnit = 'Tahun';
+      selectedJenisKucingDropdownValue = null;
+      _otherJenisKucingController.clear();
+      _showOtherJenisKucingField = false;
+      // Jika ingin reset lokasi dan alamat juga, uncomment:
+      // selectedLocation = null;
+      // selectedAddress = null;
+    });
   }
 
   Widget _buildImageWidget() {
@@ -97,29 +221,26 @@ class _PostingScreenState extends State<PostingScreen> {
     } else {
       return ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        child:
-            kIsWeb
-                ? Image.memory(
-                  _pickedImage,
-                  fit: BoxFit.contain,
-                  width: _imageWidth,
-                  height: _imageHeight,
-                )
-                : Image.file(
-                  _pickedImage,
-                  fit: BoxFit.contain,
-                  width: _imageWidth,
-                  height: _imageHeight,
-                ),
+        child: Image.file(
+          _pickedImage,
+          fit: BoxFit.contain,
+          width: _imageWidth,
+          height: _imageHeight,
+        ),
       );
     }
   }
 
-  // Membuat TextField yang hanya menerima angka atau desimal
-  Widget _buildTextField(String label, Function(String) onSaved) {
+  Widget _buildTextField(
+    String label,
+    Function(String) onSaved, {
+    String? initialValue,
+    String? Function(String?)? customValidator,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: TextFormField(
+        initialValue: initialValue,
         decoration: InputDecoration(
           labelText: label,
           labelStyle: TextStyle(fontSize: 14),
@@ -127,22 +248,22 @@ class _PostingScreenState extends State<PostingScreen> {
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         ),
         style: TextStyle(fontSize: 14),
-        keyboardType: TextInputType.numberWithOptions(decimal: true),
-        validator: (val) {
-          if (val == null || val.isEmpty) {
-            return 'Wajib diisi';
-          }
-          if (double.tryParse(val) == null) {
-            return 'Harap masukkan angka valid';
-          }
-          return null;
-        },
-        onSaved: (val) => onSaved(val!),
+        validator:
+            customValidator ??
+            (val) {
+              if (val == null || val.trim().isEmpty) {
+                return 'Wajib diisi';
+              }
+              if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(val.trim())) {
+                return 'Hanya boleh huruf dan spasi';
+              }
+              return null;
+            },
+        onSaved: (val) => onSaved(val!.trim()),
       ),
     );
   }
 
-  // Field untuk umur kucing dengan dropdown unit waktu di dalamnya
   Widget _buildAgeField() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -196,38 +317,160 @@ class _PostingScreenState extends State<PostingScreen> {
     );
   }
 
-  // Dropdown untuk memilih unit waktu (Hari, Minggu, Bulan, Tahun)
-  Widget _buildTimeUnitDropdown() {
+  Widget _buildGenderDropdown() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: DropdownButtonFormField<String>(
-        value: selectedTimeUnit,
         decoration: InputDecoration(
-          labelText: 'Unit Waktu',
+          labelText: 'Jenis Kelamin',
           labelStyle: TextStyle(fontSize: 14),
           contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         ),
-        onChanged: (String? newValue) {
+        value: gender.isNotEmpty ? gender : null,
+        items:
+            genderOptions.map((String value) {
+              return DropdownMenuItem<String>(value: value, child: Text(value));
+            }).toList(),
+        onChanged: (newValue) {
           setState(() {
-            selectedTimeUnit = newValue!;
+            gender = newValue ?? '';
           });
         },
-        items:
-            timeUnits.map((String timeUnit) {
-              return DropdownMenuItem<String>(
-                value: timeUnit,
-                child: Text(timeUnit),
-              );
-            }).toList(),
+        validator: (val) {
+          if (val == null || val.isEmpty) {
+            return 'Wajib memilih jenis kelamin';
+          }
+          return null;
+        },
+        onSaved: (val) => gender = val ?? '',
+      ),
+    );
+  }
+
+  Widget _buildJenisKucingDropdown() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: DropdownButtonFormField<String>(
+            decoration: InputDecoration(
+              labelText: 'Jenis Kucing',
+              labelStyle: TextStyle(fontSize: 14),
+              contentPadding: EdgeInsets.symmetric(
+                vertical: 10,
+                horizontal: 12,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            value: selectedJenisKucingDropdownValue,
+            items:
+                jenisKucingOptions.map((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value),
+                  );
+                }).toList(),
+            onChanged: (newValue) {
+              setState(() {
+                selectedJenisKucingDropdownValue = newValue;
+                _showOtherJenisKucingField = (newValue == 'Lainnya');
+                if (!_showOtherJenisKucingField) {
+                  _otherJenisKucingController.clear();
+                }
+              });
+            },
+            validator: (val) {
+              if (val == null || val.isEmpty) {
+                return 'Wajib memilih jenis kucing';
+              }
+              return null;
+            },
+            onSaved: (val) {
+              if (val == 'Lainnya') {
+                jenis = _otherJenisKucingController.text.trim();
+              } else {
+                jenis = val ?? '';
+              }
+            },
+          ),
+        ),
+        if (_showOtherJenisKucingField)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: TextFormField(
+              controller: _otherJenisKucingController,
+              decoration: InputDecoration(
+                labelText: 'Jenis Kucing Lainnya',
+                hintText: 'Misal: Russian Blue, Bengal',
+                labelStyle: TextStyle(fontSize: 14),
+                contentPadding: EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 12,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              style: TextStyle(fontSize: 14),
+              validator: (val) {
+                if (_showOtherJenisKucingField &&
+                    (val == null || val.trim().isEmpty)) {
+                  return 'Wajib diisi jika memilih "Lainnya"';
+                }
+                if (_showOtherJenisKucingField &&
+                    !RegExp(r'^[a-zA-Z\s]+$').hasMatch(val!.trim())) {
+                  return 'Hanya boleh huruf dan spasi';
+                }
+                return null;
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildFlutterMap() {
+    final LatLng mapCenter = selectedLocation ?? defaultLocation;
+    return SizedBox(
+      height: 200,
+      child: FlutterMap(
+        options: MapOptions(
+          initialCenter: mapCenter,
+          initialZoom: 15,
+          onTap: (tapPos, latlng) async {
+            setState(() {
+              selectedLocation = latlng;
+              selectedAddress = null;
+            });
+            await _updateAddress(latlng);
+          },
+        ),
+        children: [
+          TileLayer(
+            urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            subdomains: ['a', 'b', 'c'],
+          ),
+          if (selectedLocation != null)
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: selectedLocation!,
+                  width: 40,
+                  height: 40,
+                  child: Icon(Icons.location_on, size: 40, color: Colors.red),
+                ),
+              ],
+            ),
+        ],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final LatLng mapCenter = selectedLocation ?? defaultLocation;
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: PreferredSize(
@@ -252,9 +495,7 @@ class _PostingScreenState extends State<PostingScreen> {
                     color: Colors.black87,
                     size: 30,
                   ),
-                  onPressed: () {
-                    // TODO: Navigasi ke halaman notifikasi
-                  },
+                  onPressed: () {},
                 ),
               ],
             ),
@@ -281,84 +522,138 @@ class _PostingScreenState extends State<PostingScreen> {
               ),
               SizedBox(height: 16),
               _buildTextField('Nama Kucing', (val) => name = val),
-              _buildTextField('Jenis Kucing', (val) => jenis = val),
-              _buildTextField('Jenis Kelamin', (val) => gender = val),
-              _buildAgeField(), // Menggunakan field umur dengan dropdown unit waktu di dalamnya
+              _buildJenisKucingDropdown(),
+              _buildGenderDropdown(),
+              _buildAgeField(),
               _buildTextField('Warna', (val) => warna = val),
-              _buildTextField('Deskripsi (Opsional)', (val) => deskripsi = val),
-              SizedBox(height: 16),
-              SizedBox(height: 16),
-              Text(
-                'Pilih Lokasi Adopsi di Map: ',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 8),
-              SizedBox(
-                height: 250,
-                child: FlutterMap(
-                  options: MapOptions(
-                    initialCenter: mapCenter,
-                    initialZoom: 15,
-                    onTap: (tapPos, latlng) {
-                      setState(() {
-                        selectedLocation = latlng;
-                      });
-                    },
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      subdomains: ['a', 'b', 'c'],
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: TextFormField(
+                  decoration: InputDecoration(
+                    labelText: 'Deskripsi (Opsional)',
+                    labelStyle: TextStyle(fontSize: 14),
+                    contentPadding: EdgeInsets.symmetric(
+                      vertical: 10,
+                      horizontal: 12,
                     ),
-                    if (selectedLocation != null)
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: selectedLocation!,
-                            width: 40,
-                            height: 40,
-                            child: Icon(
-                              Icons.location_on,
-                              size: 40,
-                              color: Colors.red,
-                            ),
-                          ),
-                        ],
-                      ),
-                  ],
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  style: TextStyle(fontSize: 14),
+                  maxLines: 3,
+                  onSaved: (val) => deskripsi = val?.trim() ?? '',
                 ),
               ),
+              SizedBox(height: 10),
+              Row(
+                children: [
+                  Text(
+                    'Pilih Lokasi Adopsi di Map: ',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
               SizedBox(height: 8),
-              if (selectedLocation != null)
-                Text(
-                  'Lokasi dipilih: (${selectedLocation!.latitude.toStringAsFixed(4)}, ${selectedLocation!.longitude.toStringAsFixed(4)})',
-                  style: TextStyle(color: Colors.black87),
-                ),
-              SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () {
-                  if (_formKey.currentState!.validate() &&
-                      selectedLocation != null) {
-                    _formKey.currentState!.save();
-                    // TODO: Kirim data ke Firebase
-                    print("Data siap disimpan:");
-                    print("Nama: $name");
-                    print("Jenis: $jenis");
-                    print("Gender: $gender");
-                    print("Umur: $umur");
-                    print("Warna: $warna");
-                    print("Deskripsi: $deskripsi");
-                    print(
-                      "Lokasi: ${selectedLocation!.latitude}, ${selectedLocation!.longitude}",
-                    );
-                  }
-                },
-                child: Text('Simpan'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFF6FCF97),
-                  foregroundColor: Colors.white,
-                  minimumSize: Size(double.infinity, 50),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: _getCurrentLocation,
+                    icon: Icon(Icons.my_location, color: Colors.green),
+                    label: Text("Ambil Lokasi Saya"),
+                    style: ElevatedButton.styleFrom(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      backgroundColor: Colors.white, // warna tombol
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 10),
+              // Map dan lokasi
+              _buildFlutterMap(),
+              Row(
+                children: [
+                  Expanded(
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        selectedAddress ?? 'Alamat belum tersedia',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      subtitle:
+                          selectedLocation != null
+                              ? Text(
+                                'Lat: ${selectedLocation!.latitude.toStringAsFixed(5)}, Lng: ${selectedLocation!.longitude.toStringAsFixed(5)}',
+                                style: TextStyle(fontSize: 11),
+                              )
+                              : null,
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    if (_imageFile == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Harap pilih gambar terlebih dahulu'),
+                        ),
+                      );
+                      return; // Hentikan proses jika gambar belum dipilih
+                    }
+                    if (_formKey.currentState!.validate()) {
+                      _formKey.currentState!.save();
+                      try {
+                        final userId = FirebaseAuth.instance.currentUser?.uid;
+                        await CatService.saveCatData(
+                          name: name,
+                          jenis: jenis,
+                          gender: gender,
+                          umur: umur,
+                          satuanUmur: selectedTimeUnit,
+                          warna: warna,
+                          deskripsi: deskripsi,
+                          latitude: selectedLocation?.latitude,
+                          longitude: selectedLocation?.longitude,
+                          alamat: selectedAddress,
+                          imageFile: _imageFile,
+                          userId: userId,
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Berhasil posting!')),
+                          );
+                          _resetForm(); // reset semua field
+                        }
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Gagal posting: $e')),
+                        );
+                      }
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFF6FCF97),
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: Text(
+                    'Posting',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ),
             ],
