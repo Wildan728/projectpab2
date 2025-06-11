@@ -62,7 +62,7 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
     }).toList();
 
     return Scaffold(
-      backgroundColor: Color(0xFFEFFEF3),
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(
           'Kucing Favorit',
@@ -132,21 +132,39 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
                     )
                         : Icon(Icons.image, size: 70);
 
-                    return Card(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 4,
+                    return Container(
                       margin: EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Color(0xFFA8E6CF), // Hijau muda
+                            Color(0xFF27AE60), // Hijau solid
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 4,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
                       child: ListTile(
                         contentPadding: EdgeInsets.all(10),
                         leading: ClipRRect(
                           borderRadius: BorderRadius.circular(12),
                           child: image,
                         ),
-                        title: Text(data['name'] ?? ''),
+                        title: Text(
+                          data['name'] ?? '',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
                         subtitle: Text(
                           "${data['gender'] ?? ''}, ${data['umur'] ?? ''} ${data['satuan_umur'] ?? ''}",
+                          style: TextStyle(color: Colors.white70),
                         ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -156,7 +174,7 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
                               onPressed: () => toggleFavorite(cat),
                             ),
                             IconButton(
-                              icon: Icon(Icons.arrow_forward_ios, color: Colors.green),
+                              icon: Icon(Icons.arrow_forward_ios, color: Colors.white),
                               onPressed: () {
                                 Navigator.push(
                                   context,
