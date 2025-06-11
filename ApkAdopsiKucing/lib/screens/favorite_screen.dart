@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:convert';
+
+import 'package:pawfinder/screens/detail_screen.dart';
 
 class FavoriteScreen extends StatefulWidget {
   const FavoriteScreen({super.key});
@@ -9,8 +14,38 @@ class FavoriteScreen extends StatefulWidget {
 
 class _FavoriteScreenState extends State<FavoriteScreen> {
   String searchQuery = '';
+  List<DocumentSnapshot> favoriteCats = [];
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchFavorites();
+  }
+
+  Future<void> fetchFavorites() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('cats')
+        .where('likedBy', arrayContains: user.uid)
+        .get();
+
+    setState(() {
+      favoriteCats = snapshot.docs;
+      isLoading = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final filteredCats = favoriteCats.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      final name = data['name']?.toLowerCase() ?? '';
+      return name.contains(searchQuery.toLowerCase());
+    }).toList();
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: PreferredSize(
@@ -29,34 +64,15 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                Stack(
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        Icons.notifications_none,
-                        color: Colors.black87,
-                        size: 30,
-                      ),
-                      onPressed: () {
-                        // TODO: Navigasi ke halaman notifikasi
-                      },
-                    ),
-                    Positioned(
-                      right: 6,
-                      top: 6,
-                      child: Container(
-                        padding: EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Text(
-                          '3', // jumlah notifikasi (dummy)
-                          style: TextStyle(fontSize: 10, color: Colors.white),
-                        ),
-                      ),
-                    ),
-                  ],
+                IconButton(
+                  icon: Icon(
+                    Icons.notifications_none,
+                    color: Colors.black87,
+                    size: 30,
+                  ),
+                  onPressed: () {
+                    // Navigasi ke notifikasi
+                  },
                 ),
               ],
             ),
@@ -87,9 +103,69 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
                 },
               ),
             ),
+            SizedBox(height: 16),
+            isLoading
+                ? CircularProgressIndicator()
+                : filteredCats.isEmpty
+                ? Text('Tidak ada kucing favorit.')
+                : Expanded(
+              child: ListView.builder(
+                itemCount: filteredCats.length,
+                itemBuilder: (context, index) {
+                  final data = filteredCats[index].data()
+                  as Map<String, dynamic>;
+
+                  final imageBase64 = data['image_base64'] ?? '';
+                  final imageWidget = imageBase64.isNotEmpty
+                      ? Image.memory(
+                    base64Decode(imageBase64),
+                    width: 80,
+                    height: 80,
+                    fit: BoxFit.cover,
+                  )
+                      : Icon(Icons.image_not_supported,
+                      size: 80, color: Colors.grey);
+
+                  return Card(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: ListTile(
+                      contentPadding: EdgeInsets.all(12),
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: imageWidget,
+                      ),
+                      title: Text(
+                        data['name'] ?? 'Tanpa Nama',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      subtitle: Text(
+                        "${data['gender'] ?? ''}, ${data['umur'] ?? ''} ${data['satuan_umur'] ?? ''}",
+                      ),
+                      onTap: () {
+                        // Navigasi ke DetailScreen
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => DetailScreen(
+                              document: filteredCats[index],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 }
+
