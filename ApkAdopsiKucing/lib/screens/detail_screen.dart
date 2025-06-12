@@ -147,7 +147,15 @@ class _DetailScreenState extends State<DetailScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text('Home', style: TextStyle(color: Color(0xFF6FCF97))),
+        automaticallyImplyLeading: false,
+        title: Text(
+          'Detail',
+          style: TextStyle(
+            color: Color(0xFF6FCF97),
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
         iconTheme: IconThemeData(color: Colors.black87),

@@ -41,12 +41,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: Text(
           'Riwayat Posting',
-          style: TextStyle(color: Color(0xFF6FCF97)),
+          style: TextStyle(
+            color: Color(0xFF6FCF97),
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         backgroundColor: Colors.white,
-        elevation: 1,
+        //elevation: 1,
         iconTheme: IconThemeData(color: Colors.black),
       ),
       body: StreamBuilder<QuerySnapshot>(

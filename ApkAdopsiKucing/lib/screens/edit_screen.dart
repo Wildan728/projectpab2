@@ -167,9 +167,14 @@ class _EditScreenState extends State<EditScreen> {
     final imageBase64 = widget.initialData['image_base64'];
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: Text(
           'Edit Postingan',
-          style: TextStyle(color: Color(0xFF6FCF97)),
+          style: TextStyle(
+            color: Color(0xFF6FCF97),
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         backgroundColor: Colors.white,
         iconTheme: IconThemeData(color: Colors.black),

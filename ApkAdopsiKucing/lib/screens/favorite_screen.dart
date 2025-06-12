@@ -25,10 +25,11 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
 
   Future<void> fetchFavorites() async {
     final userId = FirebaseAuth.instance.currentUser?.uid;
-    final snapshot = await FirebaseFirestore.instance
-        .collection('cats')
-        .where('likedBy', arrayContains: userId)
-        .get();
+    final snapshot =
+        await FirebaseFirestore.instance
+            .collection('cats')
+            .where('likedBy', arrayContains: userId)
+            .get();
 
     setState(() {
       favoriteCats = snapshot.docs;
@@ -55,30 +56,26 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filteredCats = favoriteCats.where((cat) {
-      final data = cat.data() as Map<String, dynamic>;
-      final name = data['name']?.toString().toLowerCase() ?? '';
-      return name.contains(searchQuery.toLowerCase());
-    }).toList();
+    final filteredCats =
+        favoriteCats.where((cat) {
+          final data = cat.data() as Map<String, dynamic>;
+          final name = data['name']?.toString().toLowerCase() ?? '';
+          return name.contains(searchQuery.toLowerCase());
+        }).toList();
 
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(
           'Kucing Favorit',
-          style: TextStyle(color: Color(0xFF27AE60), fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Color(0xFF6FCF97),
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         backgroundColor: Colors.white,
-        elevation: 1,
         iconTheme: IconThemeData(color: Colors.black87),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.notifications_none),
-            onPressed: () {
-              // TODO: navigasi notifikasi
-            },
-          ),
-        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(12.0),
@@ -123,14 +120,15 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
                     final cat = filteredCats[index];
                     final data = cat.data() as Map<String, dynamic>;
                     final imageBase64 = data['image_base64'] ?? '';
-                    final image = imageBase64.isNotEmpty
-                        ? Image.memory(
-                      base64Decode(imageBase64),
-                      width: 70,
-                      height: 70,
-                      fit: BoxFit.cover,
-                    )
-                        : Icon(Icons.image, size: 70);
+                    final image =
+                        imageBase64.isNotEmpty
+                            ? Image.memory(
+                              base64Decode(imageBase64),
+                              width: 70,
+                              height: 70,
+                              fit: BoxFit.cover,
+                            )
+                            : Icon(Icons.image, size: 70);
 
                     return Container(
                       margin: EdgeInsets.symmetric(vertical: 8),
@@ -160,7 +158,10 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
                         ),
                         title: Text(
                           data['name'] ?? '',
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         subtitle: Text(
                           "${data['gender'] ?? ''}, ${data['umur'] ?? ''} ${data['satuan_umur'] ?? ''}",
@@ -170,16 +171,24 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: Icon(Icons.favorite, color: Colors.redAccent),
+                              icon: Icon(
+                                Icons.favorite,
+                                color: Colors.redAccent,
+                              ),
                               onPressed: () => toggleFavorite(cat),
                             ),
                             IconButton(
-                              icon: Icon(Icons.arrow_forward_ios, color: Colors.white),
+                              icon: Icon(
+                                Icons.arrow_forward_ios,
+                                color: Colors.white,
+                              ),
                               onPressed: () {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => DetailScreen(document: cat),
+                                    builder:
+                                        (context) =>
+                                            DetailScreen(document: cat),
                                   ),
                                 );
                               },

@@ -198,9 +198,11 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
               ),
               SizedBox(height: 10),
-              Text(
-                "Bergabunglah bersama kami dan temukan kucing idaman Anda!",
-                style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+              Center(
+                child: Text(
+                  "Bergabunglah bersama kami dan temukan kucing idaman Anda!",
+                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                ),
               ),
 
               SizedBox(height: 30),
