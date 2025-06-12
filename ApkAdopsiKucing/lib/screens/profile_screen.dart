@@ -1,14 +1,41 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:pawfinder/screens/login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
-
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  User? user = FirebaseAuth.instance.currentUser;
+  Map<String, dynamic>? userData;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchUserData();
+  }
+
+  Future<void> fetchUserData() async {
+    if (user != null) {
+      DocumentSnapshot userDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user!.uid)
+              .get();
+      setState(() {
+        userData = userDoc.data() as Map<String, dynamic>?;
+      });
+    }
+  }
+
+  void _logout() async {
+    await FirebaseAuth.instance.signOut();
+    Navigator.pushReplacementNamed(context, '/LoginScreen');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -22,88 +49,135 @@ class _ProfileScreenState extends State<ProfileScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Profile',
+                  'Profil',
                   style: TextStyle(
                     color: Color(0xFF6FCF97),
                     fontSize: 24,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                Stack(
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        Icons.notifications_none,
-                        color: Colors.black87,
-                        size: 30,
-                      ),
-                      onPressed: () {
-                        // TODO: Navigasi ke halaman notifikasi
-                      },
-                    ),
-                    Positioned(
-                      right: 6,
-                      top: 6,
-                      child: Container(
-                        padding: EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Text(
-                          '3', // jumlah notifikasi (dummy)
-                          style: TextStyle(fontSize: 10, color: Colors.white),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                // IconButton(
+                //   icon: Icon(Icons.dark_mode), // <- disembunyikan untuk sekarang
+                //   onPressed: () {},
+                // ),
               ],
             ),
           ),
         ),
       ),
-      // body: Stack(
-      //   children: [
-      //     SingleChildScrollView(
-      //       child: Padding(padding: const EdgeInsets.all(16),
-      //       child: Column(
-      //         children: [
-      //           Container(
-      //             decoration: BoxDecoration(
-      //               border: Border.all(color: Colors.green, width: 2),
-      //               shape: BoxShape.circle,
-      //             ),
-      //             child: CircleAvatar(
-      //               radius: 50,
-      //               backgroundImage: _imageFile.isNotEmpty,
-      //               ? (kIsWeb
-      //               ? NetworkImage(_imageFile)
-      //               : FileImage(File(_imageFile))) as ImageProvider
-      //               : AssetImage('assets/images/person.png')
-      //             ),
-      //           ),
-      //           const SizedBox(height: 10)
-      //           IconButton(
-      //             onPressed: onPressed,
-      //             icon: Icon(Icons.camera_alt),
-      //             color: Colors.green,
-      //             iconSize: 30,
-      //           ),
-      //           const SizedBox(height: 20),
-      //             Text(_UserName,
-      //               style: TextStyle(
-      //                 fontSize: 20,
-      //                 fontWeight: FontWeight.bold,
-      //               ),
-      //             ),
-      //             const SizedBox(height: 5)
-      //         ],
-      //       ),,
-      //       ),
-      //     ),
-      //   ],
-      // ),
+      body:
+          userData == null
+              ? Center(child: CircularProgressIndicator())
+              : SingleChildScrollView(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: Column(
+                  children: [
+                    CircleAvatar(
+                      radius: 60,
+                      backgroundColor: Color(0xFF6FCF97).withOpacity(0.2),
+                      child: Icon(
+                        Icons.person,
+                        size: 60,
+                        color: Color(0xFF6FCF97),
+                      ),
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      userData!['name'] ?? 'Nama Pengguna',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      '@${userData!['username'] ?? 'username'}',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                    SizedBox(height: 20),
+                    _buildInfoCard(
+                      Icons.phone,
+                      "No. Telepon",
+                      userData!['phone'],
+                    ),
+                    _buildInfoCard(Icons.email, "Email", user!.email ?? ''),
+                    SizedBox(height: 20),
+                    _buildActionButton(Icons.history, "Riwayat Posting", () {
+                      // TODO: Navigasi ke halaman riwayat posting jika sudah tersedia
+                    }),
+                    SizedBox(height: 10),
+                    _buildActionButton(
+                      Icons.logout,
+                      "Logout",
+                      _logout,
+                      isLogout: true,
+                    ),
+                  ],
+                ),
+              ),
+    );
+  }
+
+  Widget _buildInfoCard(IconData icon, String title, String value) {
+    return Container(
+      margin: EdgeInsets.symmetric(vertical: 6),
+      padding: EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Color(0xFF6FCF97)),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                ),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton(
+    IconData icon,
+    String label,
+    VoidCallback onPressed, {
+    bool isLogout = false,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        icon: Icon(icon, color: Colors.white),
+        label: Text(
+          label,
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isLogout ? Colors.redAccent : Color(0xFF6FCF97),
+          padding: EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
     );
   }
 }
