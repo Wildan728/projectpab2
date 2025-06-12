@@ -1,8 +1,11 @@
 import 'dart:convert';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:pawfinder/screens/detail_screen.dart';
+import 'package:pawfinder/screens/notification_screen.dart';
+import 'package:pawfinder/screens/posting_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -11,12 +14,94 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String searchQuery = '';
+  int unreadCount = 0;
 
   Stream<QuerySnapshot> catStream =
       FirebaseFirestore.instance
           .collection('cats')
           .orderBy('created_at', descending: true)
           .snapshots();
+
+  @override
+  void initState() {
+    super.initState();
+    fetchUnreadCount();
+  }
+
+  Future<void> fetchUnreadCount() async {
+    final count = await getUnreadNotifCount();
+    setState(() {
+      unreadCount = count;
+    });
+  }
+
+  Future<DateTime?> getLastReadNotifTime() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return null;
+
+    final snapshot =
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+
+    final data = snapshot.data();
+    if (data != null && data['lastReadNotif'] != null) {
+      return (data['lastReadNotif'] as Timestamp).toDate();
+    }
+
+    return null;
+  }
+
+  Future<void> updateLastReadNotif() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+      'lastReadNotif': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<int> getUnreadNotifCount() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return 0;
+
+    final lastRead = await getLastReadNotifTime();
+
+    final catsSnapshot =
+        await FirebaseFirestore.instance
+            .collection('cats')
+            .where('uid', isEqualTo: user.uid)
+            .get();
+
+    int count = 0;
+
+    for (final catDoc in catsSnapshot.docs) {
+      final commentsSnapshot =
+          await FirebaseFirestore.instance
+              .collection('cats')
+              .doc(catDoc.id)
+              .collection('comments')
+              .orderBy('timestamp', descending: true)
+              .get();
+
+      for (final comment in commentsSnapshot.docs) {
+        final data = comment.data();
+        final ts = (data['timestamp'] as Timestamp?)?.toDate();
+
+        final isMainComment =
+            !data.containsKey('parentId') || data['parentId'] == null;
+
+        if (isMainComment &&
+            ts != null &&
+            (lastRead == null || ts.isAfter(lastRead))) {
+          count++;
+        }
+      }
+    }
+
+    return count;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
         preferredSize: Size.fromHeight(60),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 5),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -46,25 +131,33 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: Colors.black87,
                         size: 30,
                       ),
-                      onPressed: () {
-                        // TODO: Navigasi ke halaman notifikasi
+                      onPressed: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => NotificationScreen(),
+                          ),
+                        );
+                        await updateLastReadNotif();
+                        fetchUnreadCount();
                       },
                     ),
-                    Positioned(
-                      right: 6,
-                      top: 6,
-                      child: Container(
-                        padding: EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Text(
-                          '3', // jumlah notifikasi (dummy)
-                          style: TextStyle(fontSize: 10, color: Colors.white),
+                    if (unreadCount > 0)
+                      Positioned(
+                        right: 6,
+                        top: 6,
+                        child: Container(
+                          padding: EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            unreadCount.toString(),
+                            style: TextStyle(fontSize: 10, color: Colors.white),
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ],
@@ -252,7 +345,11 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Color(0xFF6FCF97),
         onPressed: () {
           // TODO: Navigasi ke form tambah postingan
-          Navigator.pushReplacementNamed(context, '/PostingScreen');
+          //Navigator.pushReplacementNamed(context, '/PostingScreen');
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => PostingScreen()),
+          );
         },
         child: Icon(Icons.pets, size: 28),
         elevation: 6,
