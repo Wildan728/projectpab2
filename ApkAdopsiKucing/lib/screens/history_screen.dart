@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:pawfinder/screens/edit_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -139,7 +140,28 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               TextButton.icon(
                                 onPressed: () {
                                   // TODO: Navigasi ke halaman Edit
-                                  // Navigator.push(...);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder:
+                                          (_) => EditScreen(
+                                            docId: docId,
+                                            initialData: data,
+                                          ),
+                                    ),
+                                  ).then((updated) {
+                                    if (updated == true) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Postingan berhasil diperbarui',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  });
                                 },
                                 icon: Icon(
                                   Icons.edit,
