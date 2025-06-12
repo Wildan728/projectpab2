@@ -201,6 +201,7 @@ class _SignupScreenState extends State<SignupScreen> {
               Center(
                 child: Text(
                   "Bergabunglah bersama kami dan temukan kucing idaman Anda!",
+                  textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                 ),
               ),
