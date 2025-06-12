@@ -145,7 +145,7 @@ class _DetailScreenState extends State<DetailScreen> {
     final mainComments = comments.where((c) => c['parentId'] == null).toList();
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         automaticallyImplyLeading: false,
         title: Text(
@@ -156,7 +156,6 @@ class _DetailScreenState extends State<DetailScreen> {
             fontWeight: FontWeight.w700,
           ),
         ),
-        backgroundColor: Colors.white,
         elevation: 0,
         iconTheme: IconThemeData(color: Colors.black87),
       ),

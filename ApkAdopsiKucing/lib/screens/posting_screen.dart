@@ -472,7 +472,7 @@ class _PostingScreenState extends State<PostingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: PreferredSize(
         preferredSize: Size.fromHeight(60),
         child: SafeArea(

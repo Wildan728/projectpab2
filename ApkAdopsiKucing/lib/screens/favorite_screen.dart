@@ -64,7 +64,7 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
         }).toList();
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
           'Kucing Favorit',
@@ -74,7 +74,6 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
             fontWeight: FontWeight.w700,
           ),
         ),
-        backgroundColor: Colors.white,
         iconTheme: IconThemeData(color: Colors.black87),
       ),
       body: Padding(
