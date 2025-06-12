@@ -6,6 +6,8 @@ import 'package:pawfinder/screens/login_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'dart:convert';
+import 'package:pawfinder/theme_provider.dart';
+import 'package:provider/provider.dart';
 
 class ProfileScreen extends StatefulWidget {
   @override
@@ -108,27 +110,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: PreferredSize(
-        preferredSize: Size.fromHeight(60),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Profil',
-                  style: TextStyle(
-                    color: Color(0xFF6FCF97),
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
+      //backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        elevation: 0,
+        title: Text(
+          'Profil',
+          style: TextStyle(
+            color: Color(0xFF6FCF97),
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
           ),
         ),
+        actions: [
+          Consumer<ThemeProvider>(
+            builder: (context, themeProvider, _) {
+              return IconButton(
+                icon: Icon(
+                  themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
+                  color: Color(0xFF6FCF97),
+                ),
+                onPressed: () {
+                  themeProvider.toggleTheme();
+                },
+              );
+            },
+          ),
+          SizedBox(width: 8),
+        ],
+        iconTheme: IconThemeData(color: Colors.black87),
       ),
       body:
           userData == null
@@ -206,6 +216,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         MaterialPageRoute(builder: (_) => HistoryScreen()),
                       );
                     }),
+
                     SizedBox(height: 10),
                     _buildActionButton(
                       Icons.logout,

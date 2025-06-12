@@ -39,7 +39,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     print("UID Login: $userId");
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         automaticallyImplyLeading: false,
         title: Text(
@@ -50,8 +50,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
             fontWeight: FontWeight.w700,
           ),
         ),
-        backgroundColor: Colors.white,
-        //elevation: 1,
         iconTheme: IconThemeData(color: Colors.black),
       ),
       body: StreamBuilder<QuerySnapshot>(

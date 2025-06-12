@@ -166,6 +166,7 @@ class _EditScreenState extends State<EditScreen> {
   Widget build(BuildContext context) {
     final imageBase64 = widget.initialData['image_base64'];
     return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         automaticallyImplyLeading: false,
         title: Text(
@@ -176,7 +177,6 @@ class _EditScreenState extends State<EditScreen> {
             fontWeight: FontWeight.w700,
           ),
         ),
-        backgroundColor: Colors.white,
         iconTheme: IconThemeData(color: Colors.black),
       ),
       body: SingleChildScrollView(
