@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:pawfinder/screens/history_screen.dart';
 import 'package:pawfinder/screens/login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -104,6 +105,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     SizedBox(height: 20),
                     _buildActionButton(Icons.history, "Riwayat Posting", () {
                       // TODO: Navigasi ke halaman riwayat posting jika sudah tersedia
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => HistoryScreen()),
+                      );
                     }),
                     SizedBox(height: 10),
                     _buildActionButton(
