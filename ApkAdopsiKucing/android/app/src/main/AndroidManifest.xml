@@ -7,7 +7,7 @@
 
 
     <application
-        android:label="pawfinder"
+        android:label="Pawfinder"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

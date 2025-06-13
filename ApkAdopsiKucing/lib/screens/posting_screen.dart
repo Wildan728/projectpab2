@@ -489,14 +489,6 @@ class _PostingScreenState extends State<PostingScreen> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                IconButton(
-                  icon: Icon(
-                    Icons.notifications_none,
-                    color: Colors.black87,
-                    size: 30,
-                  ),
-                  onPressed: () {},
-                ),
               ],
             ),
           ),
